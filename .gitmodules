@@ -1,0 +1,3 @@
+[submodule "merry"]
+	path = merry
+	url = git@github.com:oneoo/merry.git
