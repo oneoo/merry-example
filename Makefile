@@ -22,8 +22,10 @@ example : main.o
 
 main.o:
 	[ -d objs ] || mkdir objs;
+	[ -f merry/merry.h ] || (git submodule init && git submodule update)
 	cd objs && $(CC) -c ../merry/common/*.c $(DEBUG) $(INCLUDES) $(HARDMODE);
 	cd objs && $(CC) -c ../merry/se/*.c $(DEBUG) $(INCLUDES) $(HARDMODE);
+	cd objs && $(CC) -c ../merry/se/libeio/*.c $(DEBUG) $(INCLUDES) $(HARDMODE);
 	cd objs && $(CC) -c ../merry/*.c $(DEBUG) $(INCLUDES) $(HARDMODE);
 	cd objs && $(CC) -c ../*.c $(DEBUG) $(INCLUDES) $(HARDMODE);
 

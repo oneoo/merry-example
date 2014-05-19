@@ -100,12 +100,256 @@ void be_dns_query(void *data, struct sockaddr_in addr)
     printf("%d\n", se_connect(loop_fd, aa, 80, 3, be_connect, aa));
 }
 
+/* libeio test */
+static int eio_test_step = 0;
+void eio_test();
+
+int res_cb(eio_req *req)
+{
+    eio_test();
+    printf("res_cb(%d|%s) = %d\n", req->type, req->data ? req->data : "?", EIO_RESULT(req));
+
+    if(req->result < 0) {
+        abort();
+    }
+
+    return 0;
+}
+
+int readdir_cb(eio_req *req)
+{
+    eio_test();
+    char *buf = (char *)EIO_BUF(req);
+
+    printf("readdir_cb = %d\n", EIO_RESULT(req));
+
+    if(EIO_RESULT(req) < 0) {
+        return 0;
+    }
+
+    while(EIO_RESULT(req)--) {
+        printf("readdir = <%s>\n", buf);
+        buf += strlen(buf) + 1;
+    }
+
+    return 0;
+}
+
+int stat_cb(eio_req *req)
+{
+    eio_test();
+    struct stat *buf = EIO_STAT_BUF(req);
+
+    if(req->type == EIO_FSTAT) {
+        printf("fstat_cb = %d\n", EIO_RESULT(req));
+
+    } else {
+        printf("stat_cb(%s) = %d\n", EIO_PATH(req), EIO_RESULT(req));
+    }
+
+    if(!EIO_RESULT(req)) {
+        printf("stat size %d perm 0%o\n", buf->st_size, buf->st_mode & 0777);
+    }
+
+    return 0;
+}
+
+int read_cb(eio_req *req)
+{
+    eio_test();
+    unsigned char *buf = (unsigned char *)EIO_BUF(req);
+
+    printf("read_cb = %d (%02x%02x%02x%02x %02x%02x%02x%02x)\n",
+           EIO_RESULT(req),
+           buf [0], buf [1], buf [2], buf [3],
+           buf [4], buf [5], buf [6], buf [7]);
+
+    return 0;
+}
+
+int last_fd;
+
+int open_cb(eio_req *req)
+{
+    eio_test();
+    printf("open_cb = %d\n", EIO_RESULT(req));
+
+    last_fd = EIO_RESULT(req);
+
+    return 0;
+}
+
+void eio_test()
+{
+    /* avoid relative paths yourself(!) */
+    printf("step: %d\n", eio_test_step);
+    int s = eio_test_step++;
+
+    switch(s) {
+        case 0:
+            eio_mkdir("/tmp/eio-test-dir", 0777, 0, res_cb, "mkdir");
+            break;
+
+        case 1: {
+            eio_nop(0, res_cb, "nop");
+        };
+
+        break;
+
+        case 2:
+            eio_stat("/tmp/eio-test-dir", 0, stat_cb, "stat");
+            break;
+
+        case 3:
+            eio_lstat("/tmp/eio-test-dir", 0, stat_cb, "stat");
+            break;
+
+        case 4:
+            eio_open("/tmp/eio-test-dir/eio-test-file", O_RDWR | O_CREAT, 0777, 0, open_cb, "open");
+            break;
+
+        case 5:
+            eio_symlink("test", "/tmp/eio-test-dir/eio-symlink", 0, res_cb, "symlink");
+            break;
+
+        case 6:
+            eio_mknod("/tmp/eio-test-dir/eio-fifo", S_IFIFO, 0, 0, res_cb, "mknod");
+            break;
+
+        case 7:
+            eio_utime("/tmp/eio-test-dir", 12345.678, 23456.789, 0, res_cb, "utime");
+            break;
+
+        case 8:
+            eio_futime(last_fd, 92345.678, 93456.789, 0, res_cb, "futime");
+            break;
+
+        case 9:
+            eio_chown("/tmp/eio-test-dir", getuid(), getgid(), 0, res_cb, "chown");
+            break;
+
+        case 10:
+            eio_fchown(last_fd, getuid(), getgid(), 0, res_cb, "fchown");
+            break;
+
+        case 11:
+            eio_fchmod(last_fd, 0723, 0, res_cb, "fchmod");
+            break;
+
+        case 12:
+            eio_readdir("/tmp/eio-test-dir", 0, 0, readdir_cb, "readdir");
+            break;
+
+        case 13:
+            eio_readdir("/nonexistant", 0, 0, readdir_cb, "readdir");
+            break;
+
+        case 14:
+            eio_fstat(last_fd, 0, stat_cb, "stat");
+            break;
+
+        case 15: {
+            eio_write(last_fd, "test\nfail\n", 10, 4, 0, res_cb, "write");
+        };
+
+        break;
+
+        case 16:
+            eio_read(last_fd, 0, 8, 0, EIO_PRI_DEFAULT, read_cb, "read");
+            break;
+
+        case 17:
+            eio_readlink("/tmp/eio-test-dir/eio-symlink", 0, res_cb, "readlink");
+            break;
+
+        case 18:
+            eio_dup2(1, 2, EIO_PRI_DEFAULT, res_cb, "dup");
+            break;  // dup stdout to stderr
+
+        case 19:
+            eio_chmod("/tmp/eio-test-dir", 0765, 0, res_cb, "chmod");
+            break;
+
+        case 20:
+            eio_ftruncate(last_fd, 9, 0, res_cb, "ftruncate");
+            break;
+
+        case 21:
+            eio_fdatasync(last_fd, 0, res_cb, "fdatasync");
+            break;
+
+        case 22:
+            eio_fsync(last_fd, 0, res_cb, "fsync");
+            break;
+
+        case 23:
+            eio_sync(0, res_cb, "sync");
+            break;
+
+        case 24:
+            eio_busy(0.5, 0, res_cb, "busy");
+            break;
+
+        case 25:
+            eio_sendfile(1, last_fd, 4, 5, 0, res_cb, "sendfile");
+            break;  // write "test\n" to stdout
+
+        case 26:
+            eio_fstat(last_fd, 0, stat_cb, "stat");
+            break;
+
+        case 27:
+            eio_truncate("/tmp/eio-test-dir/eio-test-file", 6, 0, res_cb, "truncate");
+            break;
+
+        case 28:
+            eio_readahead(last_fd, 0, 64, 0, res_cb, "readahead");
+            break;
+
+        case 29:
+            eio_close(last_fd, 0, res_cb, "close");
+            break;
+
+        case 30:
+            eio_link("/tmp/eio-test-dir/eio-test-file", "/tmp/eio-test-dir/eio-test-file-2", 0, res_cb, "link");
+            break;
+
+        case 31:
+            eio_rename("/tmp/eio-test-dir/eio-test-file", "/tmp/eio-test-dir/eio-test-file-renamed", 0, res_cb, "rename");
+            break;
+
+        case 32:
+            eio_unlink("/tmp/eio-test-dir/eio-fifo", 0, res_cb, "unlink");
+            break;
+
+        case 33:
+            eio_unlink("/tmp/eio-test-dir/eio-symlink", 0, res_cb, "unlink");
+            break;
+
+        case 34:
+            eio_unlink("/tmp/eio-test-dir/eio-test-file-2", 0, res_cb, "unlink");
+            break;
+
+        case 35:
+            eio_unlink("/tmp/eio-test-dir/eio-test-file-renamed", 0, res_cb, "unlink");
+            break;
+
+        case 36:
+            eio_rmdir("/tmp/eio-test-dir", 0, res_cb, "rmdir");
+            break;
+    }
+}
+/* end */
 int a = 0;
 static int other_simple_jobs()
 {
     if(a++ < 1) {
         char *aa = "www.163.com";
         printf("%d\n", se_dns_query(loop_fd, aa, 10, be_dns_query, aa));
+
+        do {
+            eio_test();
+        } while(0);
     }
 
     return 1; // return 0 will be exit the worker
