@@ -82,7 +82,7 @@ void be_connect(void *data, int fd)
     epd->stime = now;
 
     epd->se_ptr = se_add(loop_fd, fd, epd);
-    epd->timeout_ptr = add_timeout(epd, 10, timeout_handle);
+    epd->timeout_ptr = add_timeout(epd, 1000, timeout_handle);
 
     epd->out_buf = smp_malloc(1024);
     epd->out_buf_len = sprintf(epd->out_buf,
@@ -97,7 +97,7 @@ void be_dns_query(void *data, struct sockaddr_in addr)
 {
     printf("%s %s\n", (char *)data, inet_ntoa(addr.sin_addr));
     char *aa = "www.163.com";
-    printf("%d\n", se_connect(loop_fd, aa, 80, 3, be_connect, aa));
+    printf("connect %d\n", se_connect(loop_fd, aa, 80, 3000, be_connect, aa));
 }
 
 /* libeio test */
@@ -345,7 +345,8 @@ static int other_simple_jobs()
 {
     if(a++ < 1) {
         char *aa = "www.163.com";
-        printf("%d\n", se_dns_query(loop_fd, aa, 10, be_dns_query, aa));
+
+        printf("dns query %d\n", se_dns_query(loop_fd, aa, 3000, be_dns_query, aa));
 
         do {
             eio_test();
@@ -362,7 +363,7 @@ static int be_read(se_ptr_t *ptr)
     int n = recv(epd->fd, &buf_4096, 4096, 0);
 
     if(n > 0) {
-        update_timeout(epd->timeout_ptr, 10);
+        update_timeout(epd->timeout_ptr, 1000);
 
         if(network_raw_send(epd->fd, (const char *)&buf_4096, n)) {
             if(buf_4096[n - 1] == '\n') {
@@ -421,7 +422,7 @@ static void be_accept(int client_fd, struct in_addr client_addr)
     epd->stime = now;
 
     epd->se_ptr = se_add(loop_fd, client_fd, epd);
-    epd->timeout_ptr = add_timeout(epd, 10, timeout_handle);
+    epd->timeout_ptr = add_timeout(epd, 1000, timeout_handle);
 
     se_be_read(epd->se_ptr, be_read);
 }
